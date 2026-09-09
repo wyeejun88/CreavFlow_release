@@ -10,7 +10,7 @@ Supports direct import into PureRef.
 ## Privacy
 
 CreavFlow processes your files locally on your computer.
-No account registration required.
+No account or upload required.
 Your PDFs and exported images are not uploaded to a server.
 
 
@@ -72,4 +72,4 @@ Third-party credits: see `NOTICE.txt`.
 
 ## Support
 
-CreavFlow is free. If you find this app helpful, please consider [buying me a coffee](https://ko-fi.com/wyeejun).
+CreavFlow is free. If you enjoy the app and find it useful, your support would mean a lot. [buy me a coffee](https://ko-fi.com/wyeejun).
