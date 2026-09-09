@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+backups/
+_tmp_unique/
+Github-PageRef/
+PageRef/
+build/
+dist/
+*.spec
