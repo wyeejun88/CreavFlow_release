@@ -45,6 +45,7 @@ from pdf_capture import (
     ExportSettings,
     RenderCancelled,
     RenderedPage,
+    layout_measure_pages,
     parse_page_ranges,
     page_infos,
     render_selected_pages,
@@ -85,7 +86,7 @@ def estimate_title_width(text: str) -> float:
 
 APP_NAME = "CreavFlow"
 APP_SHORT_NAME = "CreavFlow"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 APP_AUTHOR = "wyeejun"
 APP_THEME = "everforest-dark"
 CHECK_STYLE = "primary-round-toggle"
@@ -94,6 +95,10 @@ SCROLL_STYLE = "round"
 SCALE_STYLE = "primary"
 PATH_BTN_WIDTH = 14  # Choose PDF / Save as… / Output folder
 RUN_BTN_WIDTH = 8  # Run / Cancel
+PREVIEW_BTN_WIDTH = 10
+PREVIEW_CANVAS_W = 320
+PREVIEW_CANVAS_H = 200
+PREVIEW_PAD = 8
 ROW_PADY = 6
 PDF_PATH_MAX_CHARS = 52
 # README dialog: height fixed; width fits longest Features line (clamped to screen).
@@ -299,6 +304,7 @@ def layout_items(
     pages: list[RenderedPage],
     settings: LayoutSettings | None = None,
     max_side: int | None = None,
+    group_by_bookmarks: bool = True,
 ) -> list[PlacedItem]:
     layout = settings or LayoutSettings()
     if max_side is None:
@@ -306,11 +312,21 @@ def layout_items(
     image_gap, group_gap = layout.gaps_for(max_side)
     max_per_row = max(MIN_PER_ROW, layout.max_per_row)
 
+    if group_by_bookmarks:
+        sections = _group_by_section(pages)
+    else:
+        sections = [("", pages)]
+
     placed: list[PlacedItem] = []
     y_cursor = 0.0
-    for section, group in _group_by_section(pages):
-        title_y = y_cursor + TITLE_HEIGHT / 2.0
-        y_cursor += TITLE_HEIGHT + image_gap
+    for section, group in sections:
+        if not group:
+            continue
+        if section:
+            title_y = y_cursor + TITLE_HEIGHT / 2.0
+            y_cursor += TITLE_HEIGHT + image_gap
+        else:
+            title_y = y_cursor
 
         # Lay out images first so we can pin the note to the group's left edge.
         section_images: list[PlacedItem] = []
@@ -335,22 +351,24 @@ def layout_items(
         if section_images:
             group_left = min(item.x - item.width / 2.0 for item in section_images)
 
-        # PureRef text x/y is the center point; offset by half width so the
-        # left edge of the note lines up with the furthest-left image.
-        title_width = estimate_title_width(section)
-        placed.append(
-            PlacedItem(
-                path=None,
-                x=group_left + title_width / 2.0,
-                y=title_y,
-                width=int(round(title_width)),
-                height=TITLE_HEIGHT,
-                name=section,
-                is_title=True,
+        if section:
+            # PureRef text x/y is the center point; offset by half width so the
+            # left edge of the note lines up with the furthest-left image.
+            title_width = estimate_title_width(section)
+            placed.append(
+                PlacedItem(
+                    path=None,
+                    x=group_left + title_width / 2.0,
+                    y=title_y,
+                    width=int(round(title_width)),
+                    height=TITLE_HEIGHT,
+                    name=section,
+                    is_title=True,
+                )
             )
-        )
         placed.extend(section_images)
-        y_cursor += group_gap - image_gap
+        if group_by_bookmarks:
+            y_cursor += group_gap - image_gap
     return placed
 
 
@@ -624,17 +642,22 @@ class App(tb.Window):
 
         self.import_panel = ttk.Frame(mode_box)
         self.import_panel.columnconfigure(1, weight=1)
+        self.import_panel.columnconfigure(2, weight=1)
+        self.import_panel.rowconfigure(6, weight=1)
 
+        save_row = ttk.Frame(self.import_panel)
+        save_row.grid(row=0, column=0, columnspan=3, sticky=tk.EW, pady=ROW_PADY)
+        save_row.columnconfigure(1, weight=1)
         self.save_pur_btn = ttk.Button(
-            self.import_panel,
+            save_row,
             text="Save as…",
             command=self.choose_output,
             width=PATH_BTN_WIDTH,
         )
-        self.save_pur_btn.grid(row=0, column=0, sticky=tk.W, pady=ROW_PADY)
+        self.save_pur_btn.grid(row=0, column=0, sticky=tk.W)
         self.output_var = tk.StringVar()
-        self.output_entry = ttk.Entry(self.import_panel, textvariable=self.output_var)
-        self.output_entry.grid(row=0, column=1, sticky=tk.EW, pady=ROW_PADY)
+        self.output_entry = ttk.Entry(save_row, textvariable=self.output_var)
+        self.output_entry.grid(row=0, column=1, sticky=tk.EW)
 
         self.overwrite = tk.BooleanVar(value=False)
         self.overwrite_check = tb.Checkbutton(
@@ -645,42 +668,88 @@ class App(tb.Window):
         )
         self.overwrite_check.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=ROW_PADY)
 
+        self.bookmark_groups_var = tk.BooleanVar(value=True)
+        self.bookmark_groups_check = tb.Checkbutton(
+            self.import_panel,
+            text="Organized by PDF bookmarks",
+            variable=self.bookmark_groups_var,
+            command=self._on_bookmark_groups_toggle,
+            bootstyle=CHECK_STYLE,
+        )
+        self.bookmark_groups_check.grid(
+            row=2, column=0, columnspan=2, sticky=tk.W, pady=ROW_PADY
+        )
+
         self.advanced_var = tk.BooleanVar(value=False)
         self.advanced_check = tb.Checkbutton(
             self.import_panel,
             text="Custom layout",
             variable=self.advanced_var,
-            command=self._sync_advanced_ui,
+            command=self._on_advanced_toggle,
             bootstyle=CHECK_STYLE,
         )
-        self.advanced_check.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=ROW_PADY)
+        self.advanced_check.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=ROW_PADY)
 
-        self.advanced_panel = ttk.Frame(self.import_panel)
-        self.advanced_panel.columnconfigure(1, weight=1)
-
-        ttk.Label(self.advanced_panel, text="Max images per row").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 12), pady=ROW_PADY
+        self.max_per_row_label = ttk.Label(self.import_panel, text="Max images per row")
+        self.max_per_row_label.grid(
+            row=4, column=0, sticky=tk.W, padx=(0, 12), pady=ROW_PADY
         )
         self.max_per_row_var = tk.StringVar(value=str(DEFAULT_MAX_PER_ROW))
-        ttk.Entry(self.advanced_panel, textvariable=self.max_per_row_var, width=6).grid(
-            row=0, column=1, sticky=tk.W, pady=ROW_PADY
+        self.max_per_row_entry = ttk.Entry(
+            self.import_panel, textvariable=self.max_per_row_var, width=6
         )
+        self.max_per_row_entry.grid(row=4, column=1, sticky=tk.W, pady=ROW_PADY)
 
-        ttk.Label(self.advanced_panel, text="Gap between images (%)").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 12), pady=ROW_PADY
+        self.image_spacing_label = ttk.Label(
+            self.import_panel, text="Gap between images (%)"
+        )
+        self.image_spacing_label.grid(
+            row=5, column=0, sticky=tk.W, padx=(0, 12), pady=ROW_PADY
         )
         self.image_spacing_var = tk.StringVar(value=str(int(DEFAULT_IMAGE_SPACING_PCT)))
-        ttk.Entry(self.advanced_panel, textvariable=self.image_spacing_var, width=6).grid(
-            row=1, column=1, sticky=tk.W, pady=ROW_PADY
+        self.image_spacing_entry = ttk.Entry(
+            self.import_panel, textvariable=self.image_spacing_var, width=6
         )
+        self.image_spacing_entry.grid(row=5, column=1, sticky=tk.W, pady=ROW_PADY)
 
-        ttk.Label(self.advanced_panel, text="Gap between groups (%)").grid(
-            row=2, column=0, sticky=tk.W, padx=(0, 12), pady=ROW_PADY
+        self.group_spacing_label = ttk.Label(
+            self.import_panel, text="Gap between groups (%)"
+        )
+        self.group_spacing_label.grid(
+            row=6, column=0, sticky=tk.NW, padx=(0, 12), pady=ROW_PADY
         )
         self.group_spacing_var = tk.StringVar(value=str(int(DEFAULT_GROUP_SPACING_PCT)))
-        ttk.Entry(self.advanced_panel, textvariable=self.group_spacing_var, width=6).grid(
-            row=2, column=1, sticky=tk.W, pady=ROW_PADY
+        self.group_spacing_entry = ttk.Entry(
+            self.import_panel, textvariable=self.group_spacing_var, width=6
         )
+        self.group_spacing_entry.grid(row=6, column=1, sticky=tk.NW, pady=ROW_PADY)
+
+        preview_box = ttk.Frame(self.import_panel)
+        preview_box.grid(
+            row=1, column=2, rowspan=6, sticky=tk.NSEW, padx=(20, 0), pady=ROW_PADY
+        )
+        preview_box.rowconfigure(0, weight=1)
+        preview_box.columnconfigure(0, weight=1)
+        colors = self.style.colors
+        self.preview_canvas = tk.Canvas(
+            preview_box,
+            width=PREVIEW_CANVAS_W,
+            height=PREVIEW_CANVAS_H,
+            bg=colors.inputbg,
+            highlightthickness=1,
+            highlightbackground=colors.border,
+            relief=tk.FLAT,
+            borderwidth=0,
+        )
+        self.preview_canvas.grid(row=0, column=0, sticky=tk.NSEW)
+        self.preview_button = ttk.Button(
+            preview_box,
+            text="Preview",
+            command=self.preview_layout,
+            width=PREVIEW_BTN_WIDTH,
+        )
+        self.preview_button.grid(row=1, column=0, sticky=tk.W, pady=(ROW_PADY, 0))
+        self._clear_layout_preview()
 
         self.extract_panel = ttk.Frame(mode_box)
         self.extract_panel.columnconfigure(1, weight=1)
@@ -1076,21 +1145,41 @@ class App(tb.Window):
         prefix = self.rename_var.get().strip() or "page"
         self.rename_example_label.config(text=f"(e.g. {prefix}_0001{ext})")
 
+    def _on_advanced_toggle(self):
+        self._sync_advanced_ui()
+        self._clear_layout_preview()
+
+    def _on_bookmark_groups_toggle(self):
+        self._sync_bookmark_group_ui()
+        self._clear_layout_preview()
+
     def _sync_advanced_ui(self):
-        if self.advanced_var.get():
-            self.advanced_panel.grid(
-                row=3, column=0, columnspan=2, sticky=tk.EW, pady=ROW_PADY
-            )
-        else:
-            self.advanced_panel.grid_remove()
-        self._ensure_window_fits_content()
+        custom_on = bool(self.advanced_var.get())
+        state = ["!disabled"] if custom_on else ["disabled"]
+        for widget in (
+            self.max_per_row_label,
+            self.max_per_row_entry,
+            self.image_spacing_label,
+            self.image_spacing_entry,
+        ):
+            widget.state(state)
+        self._sync_bookmark_group_ui()
+
+    def _sync_bookmark_group_ui(self):
+        grouping_on = bool(self.bookmark_groups_var.get()) and bool(
+            self.advanced_var.get()
+        )
+        state = ["!disabled"] if grouping_on else ["disabled"]
+        self.group_spacing_label.state(state)
+        self.group_spacing_entry.state(state)
 
     def _sync_mode_ui(self):
         self.import_panel.pack_forget()
         self.extract_panel.pack_forget()
         if self.mode_var.get() == MODE_IMPORT:
-            self.import_panel.pack(fill=tk.X)
+            self.import_panel.pack(fill=tk.BOTH, expand=True)
             self._sync_advanced_ui()
+            self._ensure_window_fits_content()
         else:
             self.extract_panel.pack(fill=tk.X)
             self._sync_export_ui()
@@ -1129,6 +1218,7 @@ class App(tb.Window):
         apply(self._settings_zone)
         if enabled:
             self._sync_export_ui()
+            self._sync_advanced_ui()
 
     def _set_busy(self, busy: bool):
         self._busy = busy
@@ -1315,10 +1405,12 @@ class App(tb.Window):
         self.range_var.set(f"1-{self.page_count}")
         self._sync_defaults()
         self._persist_settings()
+        self._clear_layout_preview()
 
     def select_all_pages(self):
         if self.page_count:
             self.range_var.set(f"1-{self.page_count}")
+            self._clear_layout_preview()
 
     def choose_output(self):
         initial = self._dialog_initial_dir(
@@ -1427,6 +1519,98 @@ class App(tb.Window):
             group_spacing_pct=group_pct,
         )
 
+    def _clear_layout_preview(self, message: str = "Click Preview") -> None:
+        canvas = getattr(self, "preview_canvas", None)
+        if canvas is None:
+            return
+        colors = self.style.colors
+        canvas.delete("all")
+        canvas.create_text(
+            PREVIEW_CANVAS_W // 2,
+            PREVIEW_CANVAS_H // 2,
+            text=message,
+            fill=colors.border,
+            font=("Segoe UI", 9),
+        )
+
+    def _draw_layout_preview(self, placed: list[PlacedItem]) -> None:
+        canvas = self.preview_canvas
+        canvas.delete("all")
+        colors = self.style.colors
+        images = [item for item in placed if not item.is_title]
+        if not images:
+            self._clear_layout_preview("Nothing to preview")
+            return
+
+        left = min(item.x - item.width / 2.0 for item in images)
+        top = min(item.y - item.height / 2.0 for item in images)
+        right = max(item.x + item.width / 2.0 for item in images)
+        bottom = max(item.y + item.height / 2.0 for item in images)
+        world_w = max(right - left, 1.0)
+        world_h = max(bottom - top, 1.0)
+
+        canvas.update_idletasks()
+        view_w = max(int(canvas.winfo_width()), PREVIEW_CANVAS_W)
+        view_h = max(int(canvas.winfo_height()), PREVIEW_CANVAS_H)
+        pad = PREVIEW_PAD
+        scale = min((view_w - 2 * pad) / world_w, (view_h - 2 * pad) / world_h)
+        offset_x = pad + ((view_w - 2 * pad) - world_w * scale) / 2.0
+        offset_y = pad + ((view_h - 2 * pad) - world_h * scale) / 2.0
+
+        def to_view(x: float, y: float) -> tuple[float, float]:
+            return (
+                offset_x + (x - left) * scale,
+                offset_y + (y - top) * scale,
+            )
+
+        for item in images:
+            x0, y0 = to_view(item.x - item.width / 2.0, item.y - item.height / 2.0)
+            x1, y1 = to_view(item.x + item.width / 2.0, item.y + item.height / 2.0)
+            canvas.create_rectangle(
+                x0,
+                y0,
+                x1,
+                y1,
+                fill="#f0f0f0",
+                outline=colors.border,
+                width=1,
+            )
+
+    def preview_layout(self):
+        if self._busy:
+            return
+        if not self.pdf_path:
+            messagebox.showwarning("PDF needed", "Choose a PDF first.")
+            return
+        pages = self.selected_pages()
+        if pages is None:
+            return
+        if not pages:
+            messagebox.showwarning("Pages needed", "Enter at least one valid PDF page.")
+            return
+        max_side = self.selected_max_side()
+        if max_side is None:
+            return
+        layout = self.selected_layout_settings()
+        if layout is None:
+            return
+
+        group_by_bookmarks = bool(self.bookmark_groups_var.get())
+        try:
+            with fitz.open(self.pdf_path) as doc:
+                measured = layout_measure_pages(doc, pages, max_side)
+        except Exception as exc:
+            messagebox.showerror("Could not preview", str(exc))
+            return
+
+        placed = layout_items(
+            measured,
+            layout,
+            max_side,
+            group_by_bookmarks=group_by_bookmarks,
+        )
+        self._draw_layout_preview(placed)
+
     def selected_export_settings(self) -> ExportSettings | None:
         self._on_quality_entry()
         fmt = self.format_var.get()
@@ -1480,6 +1664,7 @@ class App(tb.Window):
                 layout=layout,
                 output=output,
                 overwrite=overwrite,
+                group_by_bookmarks=bool(self.bookmark_groups_var.get()),
             )
             return
 
@@ -1513,6 +1698,7 @@ class App(tb.Window):
         capture_dir: Path | None = None,
         settings: ExportSettings | None = None,
         toc_subfolders: bool = False,
+        group_by_bookmarks: bool = True,
     ):
         while True:
             try:
@@ -1532,6 +1718,7 @@ class App(tb.Window):
                 "capture_dir": capture_dir,
                 "settings": settings,
                 "toc_subfolders": toc_subfolders,
+                "group_by_bookmarks": group_by_bookmarks,
             },
             daemon=True,
         )
@@ -1550,11 +1737,19 @@ class App(tb.Window):
         capture_dir: Path | None,
         settings: ExportSettings | None,
         toc_subfolders: bool,
+        group_by_bookmarks: bool,
     ):
         try:
             if mode == MODE_IMPORT:
                 assert layout is not None and output is not None
-                self._worker_import(pages, max_side, layout, output, overwrite)
+                self._worker_import(
+                    pages,
+                    max_side,
+                    layout,
+                    output,
+                    overwrite,
+                    group_by_bookmarks,
+                )
             else:
                 assert capture_dir is not None and settings is not None
                 self._worker_extract(
@@ -1581,15 +1776,21 @@ class App(tb.Window):
         layout: LayoutSettings,
         output: Path,
         overwrite: bool,
+        group_by_bookmarks: bool,
     ):
         image_gap, group_gap = layout.gaps_for(max_side)
+        group_note = (
+            f", group gap {group_gap:.0f}px, bookmark groups on"
+            if group_by_bookmarks
+            else ", bookmark groups off"
+        )
         self._ui_queue.put(
             (
                 "log",
                 (
                     f"Rendering {len(pages)} page(s) at max side {max_side} "
-                    f"(row {layout.max_per_row}, image gap {image_gap:.0f}px, "
-                    f"group gap {group_gap:.0f}px)..."
+                    f"(row {layout.max_per_row}, image gap {image_gap:.0f}px"
+                    f"{group_note})..."
                 ),
                 None,
             )
@@ -1605,7 +1806,12 @@ class App(tb.Window):
                 on_progress=self._on_progress,
                 should_cancel=self._should_cancel,
             )
-            placed = layout_items(rendered, layout, max_side)
+            placed = layout_items(
+                rendered,
+                layout,
+                max_side,
+                group_by_bookmarks=group_by_bookmarks,
+            )
             dest = write_new_pur(placed, output, overwrite)
         self._ui_queue.put(("done", {"mode": MODE_IMPORT, "dest": dest}))
 

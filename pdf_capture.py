@@ -198,6 +198,47 @@ def page_infos(doc: fitz.Document) -> list[PageInfo]:
     return infos
 
 
+def scaled_page_pixels(
+    width_pts: float, height_pts: float, max_side: int
+) -> tuple[int, int]:
+    """Pixel size after scaling the longest side to max_side (matches render scale)."""
+    max_side = validate_max_side(max_side)
+    longest = max(float(width_pts), float(height_pts))
+    if longest <= 0:
+        return 1, 1
+    scale = max_side / longest
+    return (
+        max(1, int(width_pts * scale + 0.5)),
+        max(1, int(height_pts * scale + 0.5)),
+    )
+
+
+def layout_measure_pages(
+    doc: fitz.Document,
+    pages: list[int],
+    max_side: int,
+) -> list[RenderedPage]:
+    """Page sizes + bookmark sections for layout preview (no rasterization)."""
+    max_side = validate_max_side(max_side)
+    entries = toc_entries(doc)
+    measured: list[RenderedPage] = []
+    for page_number in pages:
+        rect = doc[page_number - 1].rect
+        width_px, height_px = scaled_page_pixels(
+            float(rect.width), float(rect.height), max_side
+        )
+        measured.append(
+            RenderedPage(
+                page=page_number,
+                path=Path("."),
+                width_px=width_px,
+                height_px=height_px,
+                section=section_for_page(entries, page_number),
+            )
+        )
+    return measured
+
+
 def section_for_page(entries: list[TocEntry], page: int) -> str:
     """Assign a board section title for a page from the PDF TOC.
 

@@ -17,8 +17,9 @@ Your PDFs and exported images are not uploaded to a server.
 ## Features
 
 - Import PDF pages straight into a new `.pur` and open it
-- Organized based on PDF bookmarks hierarchy (if any)
+- Optional grouping by PDF bookmarks hierarchy (if any)
 - PureRef custom layout (images per row, spacing)
+- Layout preview before import (wireframe boxes for spacing and grouping)
 - Export pages as PNG, JPEG, or WebP (lossy or lossless)
 - Create subfolders based on PDF bookmarks hierachy (if any)
 - Cancel mid-run; works fully offline on your computer
@@ -30,7 +31,7 @@ Your PDFs and exported images are not uploaded to a server.
 2. Type the pages to capture (`1-4, 9`), or click **All pages**.
 3. Set the max side (longest side in pixels).
 4. Choose an action:
-   - **Import to PureRef (.pur)** — builds a PureRef board and opens it. Optional custom layout and overwrite of an existing `.pur`.
+   - **Import to PureRef (.pur)** — builds a PureRef board and opens it. Optional bookmark grouping, custom layout, layout preview, and overwrite of an existing `.pur`.
    - **Export to PNG / JPEG / WebP** — saves images to a folder. Optional name prefix, overwrite of existing images, and **Create folders from PDF bookmarks**.
 5. Click **Run**. If PureRef is not detected for Import, choose **Run anyway** or **Cancel**. Use **Cancel** on the main window to stop mid-run.
 
@@ -72,4 +73,4 @@ Third-party credits: see `NOTICE.txt`.
 
 ## Support
 
-CreavFlow is free. If you enjoy the app and find it useful, your support would mean a lot. [buy me a coffee](https://ko-fi.com/wyeejun).
+CreavFlow is free. If you enjoy the app and find it useful, your support would mean a lot. [buy me a coffee](https://ko-fi.com/wyeejun)
