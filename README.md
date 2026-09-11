@@ -1,8 +1,8 @@
 # CreavFlow
 
-Proudly built by a creative, for creatives.
-Convert PDF pages into images.
-Supports direct import into PureRef.
+In Archviz, PDFs are convenient for sharing building plans, but not always the best format for viewing and working with. PureRef is great for organising visual references, but doesn't support PDFs.
+
+CreavFlow bridges the gap by converting PDFs into images that can be easily used alongside your visual references and moodboards. Made to solve a small but frustrating workflow problem that I've had, hopefully it helps others in the creative industry too.
 
 ![CreavFlow overview](docs/screenshots/overview.png)
 
@@ -19,9 +19,10 @@ Your PDFs and exported images are not uploaded to a server.
 - Import PDF pages straight into a new `.pur` and open it
 - Optional grouping by PDF bookmarks hierarchy (if any)
 - PureRef custom layout (images per row, spacing)
-- Layout preview before import (wireframe boxes for spacing and grouping)
+- Layout preview before import into PureRef
 - Export pages as PNG, JPEG, or WebP (lossy or lossless)
-- Create subfolders based on PDF bookmarks hierachy (if any)
+- Create subfolders based on PDF bookmarks hierarchy (if any)
+- Never overwrites existing `.pur` or image files unless enabled
 - Cancel mid-run; works fully offline on your computer
 
 
@@ -60,6 +61,11 @@ python -m PyInstaller --noconfirm CreavFlow.spec
 Output: `dist\CreavFlow.exe`
 
 Windows Defender may flag an **unsigned** PyInstaller exe. Prefer builds from this repo’s Releases, or restore/allowlist if you built it yourself.
+
+
+## Disclaimer
+
+CreavFlow is an independent tool. It is **not affiliated with, endorsed by, or sponsored by** PureRef or its creators. PureRef is a trademark of its respective owners. CreavFlow can create `.pur` files for use with PureRef; PureRef itself is separate software you install on your own.
 
 
 ## License

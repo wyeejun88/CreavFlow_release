@@ -86,7 +86,7 @@ def estimate_title_width(text: str) -> float:
 
 APP_NAME = "CreavFlow"
 APP_SHORT_NAME = "CreavFlow"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 APP_AUTHOR = "wyeejun"
 APP_THEME = "everforest-dark"
 CHECK_STYLE = "primary-round-toggle"
@@ -999,6 +999,8 @@ class App(tb.Window):
                 "Quick and easy PDF-to-image conversion.\n"
                 "Supports direct import to PureRef.\n"
                 f"\nVersion {APP_VERSION}\n"
+                "\nCreavFlow is not affiliated with PureRef.\n"
+                "PureRef is a trademark of its respective owners.\n"
                 "\nLicensed under AGPL-3.0.\n"
                 "PDF rendering uses PyMuPDF (AGPL).\n"
                 "See LICENSE and NOTICE.txt.\n"
